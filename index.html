@@ -851,6 +851,23 @@ SUB:  adi  7            ; AR = 7
 </script></div>
 </section>
 
+<section class="slide gta">
+  <div class="hd"><div class="kick">Scale check · 60 FPS, 3.5 GHz CPU, 2 GHz GPU</div><div class="h xs">How many clocks in one second of GTA 6?</div></div>
+  <div class="row" style="gap:28px">
+    <div style="flex:0 0 380px;display:flex;flex-direction:column;gap:14px">
+      <div class="gta-stat"><span class="pill">CPU · one core · 3.5 GHz</span><b>3,500,000,000</b><em>clocks every second</em><i>58.3 million per frame (16.67 ms)</i></div>
+      <div class="gta-stat"><span class="pill">GPU · 2 GHz</span><b>2,000,000,000</b><em>clocks every second</em><i>33.3 million per frame</i></div>
+    </div>
+    <div class="col"><div class="gta-cap">Clock counts on a log scale: each gridline is × 1000</div><svg viewBox="0 0 600 304" class="gta-chart"><line x1="200" y1="6" x2="200" y2="278" stroke="#333" stroke-dasharray="3 4"/><text x="200" y="296" text-anchor="middle" class="gx">1</text><line x1="308" y1="6" x2="308" y2="278" stroke="#333" stroke-dasharray="3 4"/><text x="308" y="296" text-anchor="middle" class="gx">1 k</text><line x1="416" y1="6" x2="416" y2="278" stroke="#333" stroke-dasharray="3 4"/><text x="416" y="296" text-anchor="middle" class="gx">1 M</text><line x1="524" y1="6" x2="524" y2="278" stroke="#333" stroke-dasharray="3 4"/><text x="524" y="296" text-anchor="middle" class="gx">1 B</text><text x="190" y="32" text-anchor="end" class="gl">add r4 · our processor</text><rect x="200" y="16" width="21.7" height="24" rx="3" fill="#7c7c7c"/><text x="229.7" y="33" class="gv">4</text><text x="190" y="76" text-anchor="end" class="gl">Slide 50 program</text><rect x="200" y="60" width="41.3" height="24" rx="3" fill="#7c7c7c"/><text x="249.3" y="77" class="gv">14</text><text x="190" y="120" text-anchor="end" class="gl">2023 Q6 · sum of 5</text><rect x="200" y="104" width="85.4" height="24" rx="3" fill="#7c7c7c"/><text x="293.4" y="121" class="gv">236</text><text x="190" y="164" text-anchor="end" class="gl b">1 frame · GPU</text><rect x="200" y="148" width="270.8" height="24" rx="3" fill="#fff"/><text x="478.8" y="165" class="gv b">33.3 M</text><text x="190" y="208" text-anchor="end" class="gl b">1 frame · CPU core</text><rect x="200" y="192" width="279.6" height="24" rx="3" fill="#fff"/><text x="487.6" y="209" class="gv b">58.3 M</text><text x="190" y="252" text-anchor="end" class="gl b">1 second · CPU core</text><rect x="200" y="236" width="343.6" height="24" rx="3" fill="#fff"/><text x="551.6" y="253" class="gv b">3.5 B</text></svg></div>
+  </div>
+  <div class="row gta-facts">
+    <div class="card lt col"><b>1 year 10 months</b>to finish one CPU frame pressing <code>C</code> once a second (58.3 M presses)</div>
+    <div class="card lt col"><b>14.6 million</b>runs of <code>add r4</code> (4 clocks each) in one frame, if our processor ran at 3.5 GHz</div>
+    <div class="card lt col"><b>8.6 cm</b>is how far light travels during one 0.29 ns clock at 3.5 GHz</div>
+  </div>
+  <p class="gta-note">Clock cycles, not instructions: real cores pipeline and issue several instructions per clock, and a GPU runs thousands of lanes at once. Ours: one micro-step per clock, one bus.</p>
+</section>
+
 <!-- ================= PYQ ================= -->
 <section class="slide" data-sec="08 · Endsem PYQs">
   <div style="position:absolute;left:70px;top:150px">

@@ -111,7 +111,7 @@
   const qov = document.createElement('div'); qov.id = 'qr-ov';
   if (url) {
     const short = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    document.querySelectorAll('.qr-card').forEach(c => { c.hidden = false; c.querySelector('.qr-url').textContent = short; });
+    document.querySelectorAll('.qr-card').forEach(c => { c.hidden = false; c.querySelector('.qr-url').innerHTML = short.replace('/', '/<wbr>'); });
     qov.innerHTML = `<div><img src="assets/qr.svg" alt="QR code"><b>Scan to follow along</b><span>${short}</span></div>`;
     qov.addEventListener('click', () => qov.classList.remove('on')); deck.appendChild(qov);
   }
