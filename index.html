@@ -1,0 +1,1294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Processor Design Tutorial</title>
+<link rel="stylesheet" href="css/deck.css">
+</head>
+<body>
+<div id="stage"><div id="deck" data-url="https://incognius.github.io/processor-tutorial/">
+
+<!-- ================= TITLE ================= -->
+<section class="slide nofoot">
+  <i data-d="dots3" style="right:200px;top:96px;width:86px;height:22px"></i>
+  <div style="position:absolute;left:70px;top:250px">
+    <div class="kick" style="font-size:38px">Designing a simple</div>
+    <div class="big" style="margin-top:-4px">Processor</div>
+    <div style="margin-top:34px;font-size:21px;color:#ddd">EC2.101 Digital Systems &amp; Microcontrollers · Tutorial</div>
+    <div class="mut" style="font-size:16px;margin-top:4px">Built on P J Narayanan’s notes, <i>Design of a Simple Processor</i> (IIIT Hyderabad)</div>
+  </div>
+  <div class="qr-card" hidden><img src="assets/qr.svg" alt="QR code for this deck"><b>Follow along on your phone</b><span class="qr-url"></span></div>
+  <i data-d="halftone" class="gr" style="right:60px;bottom:40px;width:300px;height:82px"></i>
+</section>
+
+<!-- ================= ROADMAP ================= -->
+<section class="slide" data-sec="Roadmap">
+  <div class="hd"><div class="kick">Today’s</div><div class="h">Roadmap</div></div>
+  <div class="row" style="gap:18px;margin-top:40px">
+    <div class="card col"><span class="n">02</span><h4>Parts</h4>Multipurpose register, ROM, timing</div>
+    <div class="card col"><span class="n">03</span><h4>The bus</h4>Moving data with two signals per clock</div>
+    <div class="card col"><span class="n">04</span><h4>Instructions</h4>Opcodes, assembly, fetch/execute</div>
+    <div class="card col"><span class="n">05</span><h4>Micro&shy;code</h4>Each instruction as control signals</div>
+  </div>
+  <div class="row" style="gap:18px;margin-top:34px">
+    <div class="card col"><span class="n">06</span><h4>Branching</h4>Flags, jump, call, return, stack</div>
+    <div class="card col"><span class="n">07</span><h4>Sequencer</h4>The microprogram ROM and μPC</div>
+    <div class="card col"><span class="n">08</span><h4>Endsem PYQs</h4>Every processor question, answered</div>
+    <div class="col" style="display:flex;align-items:center;justify-content:center"><i data-d="tri3" style="position:static;width:110px;height:30px"></i></div>
+  </div>
+  <p class="mut" style="margin-top:26px">Section numbers follow the chapters of the PJN notes. Keys: ← → to move, <code>C</code> one clock and <code>I</code> one instruction on simulator slides, <code>F</code> fullscreen.</p>
+</section>
+
+<!-- ================= INTRO ================= -->
+<section class="slide">
+  <div class="row" style="height:100%">
+    <div class="col" style="padding-top:20px">
+      <div class="hd"><div class="h">Introduction</div></div>
+      <p class="lead">A processor is not magic. It is a few registers, an ALU and some memory sharing one set of wires, plus a table that says which switches to flip on each clock tick.</p>
+      <p>We build one, layer by layer:</p>
+      <ol class="n" style="font-size:18px">
+        <li>A register that can load, count and shift</li>
+        <li>Many registers on one <b>bus</b>, an ALU beside them</li>
+        <li>An <b>instruction set</b> encoded as bytes in memory</li>
+        <li>Each instruction written as a short <b>microprogram</b></li>
+        <li>A <b>sequencer</b> that reads those microprograms out of a ROM</li>
+      </ol>
+      <i data-d="tri3" style="left:70px;bottom:60px;width:96px;height:26px"></i>
+    </div>
+    <div style="flex:0 0 420px;position:relative;margin-right:-70px;margin-top:-50px;margin-bottom:-40px;overflow:hidden">
+      <img class="photo" src="assets/dsm/p05_0.png" alt="" style="height:100%;width:100%;object-fit:cover;opacity:.85">
+    </div>
+  </div>
+</section>
+
+<!-- ================= CH 2 ================= -->
+<section class="slide" data-sec="02 · Preliminaries">
+  <div style="position:absolute;left:70px;top:150px">
+    <div class="kick" style="font-size:30px">Chapter 02</div>
+    <div class="big" style="font-size:120px">Prelim&shy;inaries</div>
+    <p class="lead" style="max-width:640px;margin-top:26px">What you already know from the course, seen through one device: a register with many control lines.</p>
+  </div>
+  <i data-d="arches" style="right:110px;bottom:40px;width:150px;height:200px"></i>
+  <i data-d="vdots" style="right:300px;bottom:60px;width:16px;height:62px"></i>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">2.1</div><div class="h s">The multipurpose register</div></div>
+  <div class="row">
+    <div style="flex:0 0 380px">
+      <img class="fig" src="assets/figw/fig2.1.png" alt="Figure 2.1" style="width:360px">
+      <div class="figcap">Fig 2.1 · n inputs, n outputs, 10 control lines</div>
+    </div>
+    <div class="col">
+      <table class="tb">
+        <tr><th>Line</th><th>What it does</th><th>When</th></tr>
+        <tr><td class="m">IN<sub>n</sub></td><td>value to load</td><td>must be stable before the falling edge</td></tr>
+        <tr><td class="m">OUT<sub>n</sub></td><td>tristate outputs, floating unless EN = 1</td><td>driven after the rising edge</td></tr>
+        <tr><td class="m">EN</td><td>puts the stored VAL on OUT</td><td>rising edge</td></tr>
+        <tr><td class="m">LD</td><td>VAL ← IN</td><td>falling edge</td></tr>
+        <tr><td class="m">RESET</td><td>VAL ← 0 (synchronous)</td><td>falling edge</td></tr>
+        <tr><td class="m">INC / DEC</td><td>VAL ← VAL ± 1</td><td>falling edge</td></tr>
+        <tr><td class="m">SHL / SHR</td><td>shift, a 0 fills the gap</td><td>falling edge</td></tr>
+        <tr><td class="m">ROL / ROR</td><td>rotate, the bit that falls off comes back</td><td>falling edge</td></tr>
+      </table>
+      <p class="note" style="margin-top:14px">At most one of the eight actions per clock. EN may be on together with any one of them.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">2.3</div><div class="h s">Read on the rise, write on the fall</div></div>
+  <div class="row">
+    <div class="col">
+      <img class="fig" src="assets/figw/fig2.3.png" alt="Figure 2.3" style="height:470px">
+      <div class="figcap">Fig 2.3 · LD, INC and RESET on the register</div>
+    </div>
+    <div class="col">
+      <div class="card lt" style="margin-top:20px"><h4>The one rule everything depends on</h4>
+        <b>Enable</b> acts at the <b>rising</b> edge: the stored value appears on OUT about 1 ns later (access time).<br><br>
+        <b>Every change</b> (load, inc, dec, shift, rotate, reset) lands at the <b>falling</b> edge, so IN must be stable a setup time before it.
+      </div>
+      <p style="margin-top:22px">Consequence: inside one clock a register can be <b>read</b> (first half) and <b>written</b> (second half). Every one-clock data move later in the course relies on this.</p>
+      <i data-d="zig" style="right:80px;bottom:70px;width:140px;height:46px"></i>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation</div><div class="h xs">Clock the register yourself</div></div>
+  <div data-w="reg" style="margin-top:10px"></div>
+  <p class="mut" style="position:absolute;bottom:40px;left:70px;right:70px">Try: EN = 1 with INC. OUT shows the <b>old</b> value during the clock and VAL changes only at the falling edge. Then try ROL on <code>B2</code> (bit 7 wraps to bit 0) against SHL (bit 7 is lost).</p>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">2.2</div><div class="h s">ROM: a truth table you can address</div></div>
+  <div class="row">
+    <div style="flex:0 0 430px">
+      <img class="fig" src="assets/figw/fig2.2.png" alt="Figure 2.2" style="width:410px">
+      <div class="figcap">Fig 2.2 · k address lines, n-bit words</div>
+      <p style="margin-top:18px;font-size:18px">2<sup>k</sup> words of n bits. Each output bit is an arbitrary function of the k inputs, so one ROM = <b>n independent combinational circuits</b> of k variables.</p>
+      <p class="note">Hold on to this. In Chapter 7 the control unit is exactly such a ROM: address = (instruction, clock step), word = control signals.</p>
+    </div>
+    <div class="col">
+      <div class="mut" style="margin-bottom:8px">Example (asked in the Nov 2024 endsem): a ROM that outputs 7 × x for a 3-bit x. 8 words × 6 bits, since 7 × 7 = 49 needs 6 bits.</div>
+      <div data-w="rom7"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CH 3 ================= -->
+<section class="slide" data-sec="03 · The bus">
+  <div style="position:absolute;left:70px;top:150px">
+    <div class="kick" style="font-size:30px">Chapter 03</div>
+    <div class="big">The Bus</div>
+    <p class="lead" style="max-width:640px;margin-top:26px">One set of shared wires. Every device listens; at most one talks.</p>
+  </div>
+  <i data-d="ring" style="right:120px;top:200px;width:220px;height:220px"></i>
+  <i data-d="dots3" style="right:180px;bottom:90px;width:70px;height:18px"></i>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">3.0</div><div class="h s">Devices on a central bus</div></div>
+  <div class="row">
+    <div style="flex:0 0 520px">
+      <img class="fig" src="assets/figw/fig3.1.png" alt="Figure 3.1" style="width:500px">
+      <div class="figcap">Fig 3.1 · four registers on one bus</div>
+    </div>
+    <div class="col">
+      <ul class="t">
+        <li>Each register’s IN and OUT lines connect to the <b>same</b> bus wires.</li>
+        <li>Two outputs fighting over one wire would damage both. Tristate outputs make sharing legal: a disabled output floats (high impedance, “Z”).</li>
+        <li>So the only rule: <b>at most one E signal at level 1</b> in any clock.</li>
+        <li>Any number of L signals may be on: every loader copies the same bus value.</li>
+      </ul>
+      <p class="mut" style="margin-top:16px">Register A’s lines are named E<sub>A</sub>, L<sub>A</sub>, I<sub>A</sub>; B’s are E<sub>B</sub>, L<sub>B</sub>, I<sub>B</sub>, and so on.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">3.1</div><div class="h s">One clock, one assignment</div></div>
+  <div class="row">
+    <div class="col">
+      <p class="lead">Turn on just E<sub>A</sub> and L<sub>B</sub> for one clock:</p>
+      <div class="sgs" style="margin:6px 0 16px">EA, LB</div>
+      <ol class="n" style="font-size:18px">
+        <li>Rising edge: A drives its value onto the bus.</li>
+        <li>The bus feeds every IN, including B’s.</li>
+        <li>Falling edge: B loads. Net effect <code>B ← A</code>.</li>
+      </ol>
+      <p style="margin-top:16px">We write the clock as <code>Ck i: EA, LB</code>. The order inside the list means nothing; it is a set of signals that are high together.</p>
+    </div>
+    <div style="flex:0 0 560px">
+      <img class="fig" src="assets/figw/fig3.3.png" alt="Figure 3.3" style="width:520px">
+      <div class="figcap">Fig 3.3 · whole-clock timing for Ck i: EA, LB</div>
+      <div data-w="timing" data-spec="eaLb" style="margin-top:16px;width:520px"></div>
+      <div class="figcap">The same clock redrawn: the bus is Z (dashed) until A is enabled</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation</div><div class="h xs">The bus lab</div></div>
+  <div data-w="bus"></div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Think first</div><div class="h s">Old value or new?</div></div>
+  <div class="row">
+    <div class="col">
+      <p class="lead">B holds 10. One clock runs <code>EB, LA, IB</code>.</p>
+      <p>B is copied to A <b>and</b> incremented in the same clock. Does A get 10 or 11?</p>
+      <div class="reveal" style="margin-top:20px">
+        <div class="card lt"><h4>A gets 10</h4>B drives the bus from the rising edge. The increment only changes VAL<sub>B</sub> at the falling edge, the same instant A samples the bus, and the register design guarantees the new value never reaches the bus in that clock. After the clock: A = 10, B = 11.</div>
+        <p style="margin-top:16px">General rule: a register can be a bus <b>source</b> and have its own contents <b>changed</b> in the same clock. The processor uses this everywhere, e.g. <code>EPC, LMR, IPC</code> in every fetch.</p>
+      </div>
+    </div>
+    <div style="flex:0 0 420px;position:relative">
+      <div class="memstrip" style="margin-top:40px">
+        <div><span>A</span><b>?</b><em>loads the bus</em></div>
+        <div class="hl"><span>B</span><b>10</b><em>drives the bus, +1</em></div>
+      </div>
+      <i data-d="plus3" style="left:0;top:220px;width:30px;height:110px"></i>
+      <i data-d="arcs" style="right:0;bottom:30px;width:150px;height:150px"></i>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">3.1.1</div><div class="h s">Adding an ALU</div></div>
+  <div class="row">
+    <div style="flex:0 0 470px">
+      <img class="fig" src="assets/figw/fig3.4.png" alt="Figure 3.4" style="width:440px">
+      <div class="figcap">Fig 3.4 · single bus with ALU, OR and AR</div>
+    </div>
+    <div class="col">
+      <ul class="t sq" style="font-size:18px">
+        <li>ALU left input: the <b>bus</b>. Right input: <b>OR</b> (operand register), loaded from the bus.</li>
+        <li>ALU output goes only into <b>AR</b> (accumulator register), which can drive the bus.</li>
+        <li>Two select lines: ADD, SUB (left − right), AND, PASS0 (copy left input).</li>
+      </ul>
+      <p style="margin-top:12px"><code>Ck i: EOR, EA, LAR, SALU←ADD</code> gives <code>AR ← A + OR</code>. Two enables, but OR does not touch the bus, so no conflict.</p>
+      <div class="row" style="gap:10px;margin-top:10px">
+        <div class="card col" style="font-size:15px"><span class="n">C←B−A</span><code>Ck 10: EA, LOR</code><br><code>Ck 11: EB, EOR, LAR, SUB</code><br><code>Ck 12: EAR, LC</code></div>
+        <div class="card col" style="font-size:15px"><span class="n">D←C∧D</span><code>Ck 10: EC, LOR</code><br><code>Ck 11: ED, EOR, LAR, AND</code><br><code>Ck 12: EAR, LD</code></div>
+      </div>
+      <p class="mut" style="margin-top:12px">Each clock here is a <b>microcycle</b>. Both sequences are presets in the bus lab.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">3.2</div><div class="h s">Enhanced single bus</div></div>
+  <div class="row">
+    <div style="flex:0 0 330px">
+      <img class="fig" src="assets/figw/fig3.5.png" alt="Figure 3.5" style="height:480px">
+      <div class="figcap">Fig 3.5 · ALU + register array</div>
+    </div>
+    <div class="col">
+      <p>The four registers become a <b>register array</b> R0 to R11 with one enable E<sub>RG</sub>, one load L<sub>RG</sub> and 4 select lines S<sub>RG</sub>.</p>
+      <div class="row" style="gap:14px;margin:6px 0 14px">
+        <div class="box col"><div class="mut">separate lines</div><div style="font:800 46px var(--hd)">22</div><div class="mut">11 × (E, L)</div></div>
+        <div class="box col" style="background:#fff;color:#000"><div style="color:#555;font-size:15px">register array</div><div style="font:800 46px var(--hd)">6</div><div style="color:#555;font-size:15px">4 select + E + L</div></div>
+      </div>
+      <p style="font-size:18px">Price: one register at a time, load and read only. The ALU now has 3 select lines (none, add, sub, and, or, xor, pass).</p>
+      <table class="tb" style="font-size:15px">
+        <tr><th>Operation</th><th>Ck 0</th><th>Ck 1</th></tr>
+        <tr><td class="m">ADD R1</td><td class="m">ERG, LOR, SRG←1</td><td class="m">EAR, LAR, SALU←ADD</td></tr>
+        <tr><td class="m">XOR R11</td><td class="m">ERG, LOR, SRG←11</td><td class="m">EAR, LAR, SALU←XOR</td></tr>
+        <tr><td class="m">LOAD R4</td><td class="m" colspan="2">ERG, LAR, SRG←4, SALU←PASS0 (one clock)</td></tr>
+        <tr><td class="m">STOR R9</td><td class="m" colspan="2">EAR, LRG, SRG←9 (one clock)</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">3.3</div><div class="h s">Accumulator architecture</div></div>
+  <div class="row" style="margin-top:20px">
+    <div class="col">
+      <p class="lead">AR is always one source and always the destination: <code>AR ← AR op R</code>.</p>
+      <p>Early real processors worked this way. It keeps every instruction to one register argument, which is why one byte is enough to encode it.</p>
+      <div class="note" style="margin-top:20px">Naming trap. In Ch 3 <code>LOAD R4</code> / <code>STOR R9</code> mean register ↔ AR. From Ch 4 on those moves are called <code>movs</code> / <code>movd</code>, and <code>load</code> / <code>stor</code> mean <b>memory</b> ↔ register. Exams use the Ch 4 names.</div>
+    </div>
+    <div style="flex:0 0 430px">
+      <div class="card" style="margin-top:20px"><span class="n">AR</span><h4>Every ALU instruction</h4>
+        <div style="font:600 21px/1.6 var(--mono);text-align:center">AR ← AR + R<br>AR ← AR − R<br>AR ← AR ⊕ R<br>AR ← AR ∧ R<br>AR ← AR ∨ R</div></div>
+      <i data-d="grid" style="right:70px;bottom:60px;width:150px;height:46px"></i>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CH 4 ================= -->
+<section class="slide" data-sec="04 · Instructions">
+  <div style="position:absolute;left:70px;top:150px">
+    <div class="kick" style="font-size:30px">Chapter 04</div>
+    <div class="big" style="font-size:132px">Instruc&shy;tions</div>
+    <p class="lead" style="max-width:660px;margin-top:26px">An 8-bit processor: 8-bit data, 8-bit instructions, 8-bit addresses (256 words of memory).</p>
+  </div>
+  <i data-d="half" style="right:120px;top:120px;width:120px;height:200px"></i>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">4.1</div><div class="h s">Stored program, machine code</div></div>
+  <div class="row">
+    <div style="flex:0 0 470px">
+      <img class="fig" src="assets/figw/fig4.1.png" alt="Figure 4.1" style="width:450px">
+      <div class="figcap">Fig 4.1 · von Neumann model: program and data in one memory</div>
+    </div>
+    <div class="col">
+      <ul class="t" style="font-size:18px">
+        <li>Instructions sit in consecutive memory words; the processor fetches and executes them one by one. Real work happens as a <b>side effect</b>.</li>
+        <li><b>Machine code / opcode</b>: the binary string, e.g. <code>0x10</code>. The only “language” the hardware understands.</li>
+        <li><b>Assembly</b>: a one-to-one human spelling, e.g. <code>add r0</code>.</li>
+      </ul>
+      <div class="row ac" style="gap:16px;margin-top:20px">
+        <div class="bytes"><span class="hi">0001</span><span>0001</span></div>
+        <div style="font-size:30px">→</div>
+        <div style="font:600 28px var(--mono)">add r1</div>
+      </div>
+      <p class="mut" style="margin-top:8px">upper 4 bits: operation · lower 4 bits: register</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">4.2</div><div class="h s">Arithmetic &amp; logic instructions</div></div>
+  <div class="row">
+    <div class="col">
+      <table class="tb">
+        <tr><th>Assembly</th><th>Code</th><th>Action</th></tr>
+        <tr><td class="m">add ⟨R⟩</td><td class="m">10–1F</td><td class="m">[AR] ← [AR] + [⟨R⟩]</td></tr>
+        <tr><td class="m">sub ⟨R⟩</td><td class="m">20–2F</td><td class="m">[AR] ← [AR] − [⟨R⟩]</td></tr>
+        <tr><td class="m">xor ⟨R⟩</td><td class="m">30–3F</td><td class="m">[AR] ← [AR] ⊕ [⟨R⟩]</td></tr>
+        <tr><td class="m">and ⟨R⟩</td><td class="m">40–4F</td><td class="m">[AR] ← [AR] ∧ [⟨R⟩]</td></tr>
+        <tr><td class="m">or ⟨R⟩</td><td class="m">50–5F</td><td class="m">[AR] ← [AR] ∨ [⟨R⟩]</td></tr>
+        <tr><td class="m">cmp ⟨R⟩</td><td class="m">60–6F</td><td class="m">[AR] − [⟨R⟩], result discarded</td></tr>
+      </table>
+      <p class="mut" style="margin-top:10px"><code>[R1]</code> means “contents of R1”. <code>cmp</code> only sets the flags, which the conditional jumps of Ch 6 read.</p>
+    </div>
+    <div style="flex:0 0 400px">
+      <div class="qa"><h5>Decode these (cover the right side)</h5></div>
+      <table class="tb" style="font-size:18px">
+        <tr><td class="m">ADD R1</td><td class="m">0x11</td></tr>
+        <tr><td class="m">XOR R8</td><td class="m">0x38</td></tr>
+        <tr><td class="m">OR R11</td><td class="m">0x5B</td></tr>
+        <tr><td class="m">0x27</td><td class="m">SUB R7</td></tr>
+        <tr><td class="m">0x42</td><td class="m">AND R2</td></tr>
+        <tr><td class="m">0x1D</td><td class="m">invalid: no R13</td></tr>
+      </table>
+      <i data-d="diam" style="right:40px;bottom:50px;width:24px;height:90px"></i>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">4.2</div><div class="h s">Immediate mode: two words</div></div>
+  <div class="row">
+    <div class="col">
+      <table class="tb">
+        <tr><th>Assembly</th><th>Code</th><th>Action</th></tr>
+        <tr><td class="m">adi xx</td><td class="m">01</td><td class="m">[AR] ← [AR] + xx</td></tr>
+        <tr><td class="m">sbi xx</td><td class="m">02</td><td class="m">[AR] ← [AR] − xx</td></tr>
+        <tr><td class="m">xri xx</td><td class="m">03</td><td class="m">[AR] ← [AR] ⊕ xx</td></tr>
+        <tr><td class="m">ani xx</td><td class="m">04</td><td class="m">[AR] ← [AR] ∧ xx</td></tr>
+        <tr><td class="m">ori xx</td><td class="m">05</td><td class="m">[AR] ← [AR] ∨ xx</td></tr>
+        <tr><td class="m">cmi xx</td><td class="m">06</td><td class="m">[AR] − xx, flags only</td></tr>
+      </table>
+      <p style="margin-top:12px;font-size:18px">The constant is 8 bits, as wide as the opcode, so it cannot hide in the opcode. It sits in the <b>next word</b>. Typical use: set a loop counter, step a pointer.</p>
+      <p class="mut">Some papers write <code>subi</code> for <code>sbi</code>; same instruction.</p>
+    </div>
+    <div style="flex:0 0 360px">
+      <div class="mut" style="margin-bottom:8px">Memory holding <code>adi 05</code> then <code>add r1</code></div>
+      <div class="memstrip">
+        <div><span>20</span><b>01</b><em>opcode: adi</em></div>
+        <div class="hl"><span>21</span><b>05</b><em>operand xx</em></div>
+        <div><span>22</span><b>11</b><em>next opcode: add r1</em></div>
+      </div>
+      <p style="font-size:17px;margin-top:16px">After fetching <code>01</code> from 20, PC already says 21: exactly where the operand is. Remember this for Ch 5.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">4.3</div><div class="h s">Data movement</div></div>
+  <div class="row">
+    <div class="col">
+      <table class="tb">
+        <tr><th>Assembly</th><th>Code</th><th>Action</th></tr>
+        <tr><td class="m">movs ⟨R⟩</td><td class="m">70–7F</td><td class="m">[AR] ← [⟨R⟩]</td></tr>
+        <tr><td class="m">movd ⟨R⟩</td><td class="m">80–8F</td><td class="m">[⟨R⟩] ← [AR]</td></tr>
+        <tr><td class="m">movi ⟨R⟩ xx</td><td class="m">90–9F</td><td class="m">[⟨R⟩] ← xx</td></tr>
+        <tr><td class="m">stor ⟨R⟩</td><td class="m">A0–AF</td><td class="m">[[AR]] ← [⟨R⟩]</td></tr>
+        <tr><td class="m">load ⟨R⟩</td><td class="m">B0–BF</td><td class="m">[⟨R⟩] ← [[AR]]</td></tr>
+      </table>
+      <p style="margin-top:12px;font-size:18px">Mnemonic: <b>s</b> = register is the <b>s</b>ource, <b>d</b> = register is the <b>d</b>estination. Memory instructions always take their <b>address from AR</b>.</p>
+    </div>
+    <div style="flex:0 0 390px">
+      <div class="qa"><h5>Reading [[AR]]</h5></div>
+      <div class="row ac" style="gap:14px">
+        <div class="box" style="text-align:center"><div class="mut">AR</div><div style="font:600 30px var(--mono)">40</div></div>
+        <div style="font-size:28px">→</div>
+        <div class="memstrip" style="flex:1">
+          <div><span>3F</span><b>12</b></div><div class="hl"><span>40</span><b>9C</b></div><div><span>41</span><b>00</b></div>
+        </div>
+      </div>
+      <p style="font-size:17px;margin-top:14px">Inner brackets: contents of AR (0x40). Outer brackets: use it as an address. <code>load r3</code> sets R3 = 9C.</p>
+      <p class="mut">One address word → at most 2<sup>8</sup> = 256 words of memory.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Interactive</div><div class="h xs">The whole opcode space</div></div>
+  <div data-w="opmap" data-start="39"></div>
+  <div class="om-key"><span><i style="background:#fff"></i>nop / stop</span><span><i style="background:#cfcfcf"></i>immediate ALU</span><span><i style="background:#8c8c8c"></i>register ALU</span><span><i style="background:#4e4e4e"></i>data movement</span><span><i style="background:#2c2c2c"></i>stack</span><span><i style="background:#151515;border:1px solid #555"></i>jump / call / return</span><span><i style="background:repeating-linear-gradient(45deg,#111 0 3px,#333 3px 6px)"></i>R12–R15: unused</span></div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">4.4 – 4.5</div><div class="h s">Fetch, execute, repeat</div></div>
+  <div class="row">
+    <div style="flex:0 0 360px">
+      <img class="fig" src="assets/figw/fig4.2.png" alt="Figure 4.2" style="width:330px">
+      <div class="figcap">Fig 4.2 · the endless loop</div>
+    </div>
+    <div class="col">
+      <p>The <b>program counter (PC)</b> always holds the address of the next instruction. Fetch reads the word at PC and bumps PC; execute does the work. Forever, until <code>stop</code>.</p>
+      <div class="qa" style="margin-top:20px"><h5>But who starts the very first program?</h5></div>
+      <ol class="n" style="font-size:18px">
+        <li>Power-on or reset forces <b>PC = 0</b> in hardware.</li>
+        <li>A ROM sits at address 0 with the BIOS.</li>
+        <li>The BIOS loads the OS from the boot record; the OS starts everything else.</li>
+      </ol>
+      <p class="mut" style="margin-top:12px">So the PC needs three abilities: load, increment, reset to 0.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">4.6</div><div class="h s">Reaching memory</div></div>
+  <div class="row">
+    <div style="flex:0 0 470px">
+      <img class="fig" src="assets/figw/fig4.3.png" alt="Figure 4.3" style="width:440px">
+      <div class="figcap">Fig 4.3 · PC, MAR and the memory interface</div>
+    </div>
+    <div class="col">
+      <ul class="t" style="font-size:18px">
+        <li><b>MAR</b> (memory address register) is loaded from the bus and always drives the address lines. It never needs to drive the bus.</li>
+        <li>Memory data lines are wired straight onto the bus: memory behaves like a huge external register array whose “select” is MAR.</li>
+        <li><b>RD</b>: memory drives the bus with M[MAR]. <b>WR</b>: memory stores the bus value at M[MAR].</li>
+        <li>Simplification: a read finishes inside one clock. Real memory is much slower.</li>
+      </ul>
+      <table class="tb" style="margin-top:14px;font-size:16px"><tr><th>Assembly</th><th>Code</th><th>Action</th></tr>
+        <tr><td class="m">nop</td><td class="m">00</td><td>nothing; still costs fetch + 1 clock</td></tr>
+        <tr><td class="m">stop</td><td class="m">07</td><td>stops fetching; only reset or power cycle recovers</td></tr></table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CH 5 ================= -->
+<section class="slide" data-sec="05 · Implementing">
+  <div style="position:absolute;left:70px;top:150px">
+    <div class="kick" style="font-size:30px">Chapter 05</div>
+    <div class="big" style="font-size:118px">Implement&shy;ing</div>
+    <p class="lead" style="max-width:700px;margin-top:26px">Every instruction becomes a list of clocks, each clock a set of control signals. That list is the instruction’s <b>microprogram</b>.</p>
+  </div>
+  <i data-d="arcs" style="right:90px;bottom:60px;width:200px;height:200px"></i>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Vocabulary</div><div class="h s">Microcycles &amp; microinstructions</div></div>
+  <div class="row" style="gap:20px;margin-top:30px">
+    <div class="card col"><span class="n">01</span><h4>Microcycle</h4>One clock in which one basic operation happens (the timing diagrams of Ch 2).</div>
+    <div class="card col"><span class="n">02</span><h4>Micro&shy;instruction</h4>The set of control signals high during that clock, e.g. <code>ERG, LOR, SRG←4</code>.</div>
+    <div class="card col"><span class="n">03</span><h4>End</h4>A special signal in the last clock of every instruction: “done, go fetch the next one”.</div>
+    <div class="card col"><span class="n">04</span><h4>Ck 1, 2 = fetch</h4>Execution clocks are numbered from 3 so the last label is the instruction’s total clock count.</div>
+  </div>
+  <i data-d="zig" style="left:70px;bottom:70px;width:150px;height:46px"></i>
+  <i data-d="dots3" style="right:90px;bottom:80px;width:70px;height:18px"></i>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">5.3</div><div class="h s">Instruction fetch</div></div>
+  <div class="row">
+    <div class="col">
+      <div data-w="mctable" data-ins="fetch"></div>
+      <ol class="n" style="font-size:18px;margin-top:16px">
+        <li><b>Ck 1</b>: PC drives the bus, MAR loads it. PC increments in the same clock (old value already on the bus, as in the “old or new” puzzle).</li>
+        <li><b>Ck 2</b>: memory reads M[MAR] onto the bus, IR loads the opcode. L<sub>MS</sub> hands the decoded opcode to the sequencer (Ch 7).</li>
+      </ol>
+      <p class="note">Identical for every instruction: 2 clocks before any execution starts.</p>
+    </div>
+    <div style="flex:0 0 520px">
+      <div data-w="timing" data-spec="fetch2010"></div>
+      <div class="figcap">Fetch with PC = 100 and M[100] = 05 (the 2010 endsem asked exactly this)</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">5.1</div><div class="h s">ALU instructions in two clocks</div></div>
+  <div class="row">
+    <div style="flex:0 0 520px">
+      <div data-w="mctable" data-ins="add <R>|sub <R>|cmp <R>|nop"></div>
+      <p class="mut" style="margin-top:8px">xor, and, or: same as add with S<sub>ALU</sub> changed.</p>
+      <ul class="t sq" style="font-size:17px;margin-top:10px">
+        <li>Ck 3: selected register → OR. S<sub>RG</sub> = lower 4 bits of the opcode.</li>
+        <li>Ck 4: AR on the bus, ALU combines it with OR, result back into AR. Enable at the rise, load at the fall: AR is read and written in one clock.</li>
+        <li><code>cmp</code> drops L<sub>AR</sub> but still needs Ck 4: the subtraction (and its flags) happen there.</li>
+      </ul>
+    </div>
+    <div class="col">
+      <img class="fig" src="assets/figw/fig5.1.png" alt="Figure 5.1" style="width:100%">
+      <div class="figcap">Fig 5.1 · execution of ADD</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation · add ⟨R⟩</div><div class="h xs">Watch AR ← AR + R4</div></div>
+  <div class="simbox" data-watch="00-07"><script type="text/x-asm">
+; AR = 0C, R4 = 05, then add r4 (asked in Nov 2024 Q2a)
+      movi r4, 0x05     ; R4 = 05
+      movi r1, 0x0C
+      movs r1           ; AR = 0C
+      add  r4           ; AR = 0C + 05 = 11
+      stop
+</script></div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">5.2</div><div class="h s">Data movement</div></div>
+  <div class="row">
+    <div style="flex:0 0 560px"><div data-w="mctable" data-ins="movs <R>|movd <R>|load <R>|stor <R>|movi <R> xx"></div></div>
+    <div class="col">
+      <div class="card lt" style="font-size:16px"><h4>movs in one clock</h4>Register → bus → ALU set to PASS0 → AR, all inside one clock. Possible only because enable happens at the rise and load at the fall.</div>
+      <ul class="t sq" style="font-size:16px;margin-top:12px">
+        <li><code>load</code>/<code>stor</code>: Ck 3 copies the address AR → MAR; Ck 4 does the RD or WR.</li>
+        <li><code>movi</code> is a <code>load</code> whose address comes from <b>PC</b>, not AR. PC already points at the operand. IPC in Ck 3 moves PC past it, so the next fetch finds the next opcode.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation · load / stor / movs / movd</div><div class="h xs">Copy a memory word</div></div>
+  <div class="simbox" data-watch="A0-A3"><script type="text/x-asm">
+; copy M[A0] into M[A1], keep a copy in R5
+.data 0xA0: 0x2A
+      movi r1, 0xA0     ; R1 = address
+      movs r1           ; AR = A0
+      load r2           ; R2 = M[A0]
+      adi  1            ; AR = A1
+      stor r2           ; M[A1] = R2
+      movs r2
+      movd r5           ; R5 = R2 via AR
+      stop
+</script></div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">5.2</div><div class="h s">Immediate ALU instructions</div></div>
+  <div class="row">
+    <div style="flex:0 0 520px"><div data-w="mctable" data-ins="adi xx|cmi xx"></div>
+      <p class="mut" style="margin-top:8px">sbi, xri, ani, ori: as adi with their ALU select.</p></div>
+    <div class="col">
+      <p>The only difference from <code>add ⟨R⟩</code> is where OR gets its operand:</p>
+      <div class="row" style="gap:12px;margin:10px 0 16px">
+        <div class="box col"><div class="mut">register form</div><code>ERG, LOR</code><div class="mut">1 clock</div></div>
+        <div class="box col" style="background:#fff;color:#000"><div style="color:#555;font-size:15px">immediate form</div><code>EPC, LMR, IPC</code><br><code>RD, LOR</code><div style="color:#555;font-size:15px">2 clocks</div></div>
+      </div>
+      <p style="font-size:18px">So immediate ALU instructions take 3 execute clocks, <b>5 in total</b>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation · adi / movi / cmi</div><div class="h xs">Constants from the instruction stream</div></div>
+  <div class="simbox" data-watch="00-0A"><script type="text/x-asm">
+; watch PC point at each operand byte
+      movi r3, 0x40     ; R3 = 40
+      movs r3           ; AR = 40
+      adi  0x15         ; AR = 55
+      xri  0xFF         ; AR = AA  (flip every bit)
+      cmi  0xAA         ; flags only: Z = 1, AR unchanged
+      stop
+</script></div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Cheat sheet</div><div class="h s">How many clocks?</div></div>
+  <div class="row">
+    <div class="col"><div data-w="clocks"></div></div>
+    <div style="flex:0 0 400px">
+      <div class="card lt" style="font-size:17px"><h4>Total time of a program</h4>Sum of the clocks of every instruction <b>actually executed</b> (loops count every pass). Multiply by the clock period.</div>
+      <p style="font-size:17px;margin-top:16px">Conditional branches: when the flag test fails, the instruction ends at Ck 3. Total <b>3</b> clocks. <code>jmpd</code> still steps PC past its address word in that clock.</p>
+      <p class="mut">Example: a loop body of 15 clocks run 3 times, plus 3 clocks for the final not-taken jump, is 15 × 3 + 3 = 48 clocks.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CH 6 ================= -->
+<section class="slide" data-sec="06 · Complete processor">
+  <div style="position:absolute;left:70px;top:150px">
+    <div class="kick" style="font-size:30px">Chapter 06</div>
+    <div class="big" style="font-size:124px">Complete<br>Processor</div>
+    <p class="lead" style="max-width:640px;margin-top:26px">Branching, subroutines, the stack, flags.</p>
+  </div>
+  <i data-d="half" style="right:130px;top:140px;width:120px;height:200px"></i>
+  <i data-d="plus3" style="right:310px;top:320px;width:26px;height:96px"></i>
+</section>
+
+<section class="slide">
+  <div class="row" style="height:100%">
+    <div style="flex:0 0 470px;margin-top:-20px">
+      <img class="fig" src="assets/figw/fig6.1.png" alt="Figure 6.1" style="height:620px">
+    </div>
+    <div class="col">
+      <div class="hd"><div class="kick">Fig 6.1</div><div class="h xs">The full single-bus processor</div></div>
+      <table class="tb" style="font-size:15px">
+        <tr><td class="m">MR (MAR)</td><td>holds the memory address</td></tr>
+        <tr><td class="m">PC</td><td>next instruction address; inc, load, reset</td></tr>
+        <tr><td class="m">SP</td><td>stack pointer; inc, dec, load</td></tr>
+        <tr><td class="m">IR + decoder</td><td>current opcode → μROM start address</td></tr>
+        <tr><td class="m">OR, ALU, AR</td><td>operand, arithmetic, accumulator</td></tr>
+        <tr><td class="m">RG</td><td>R0–R11, select S<sub>RG</sub></td></tr>
+        <tr><td class="m">Flag register</td><td>Z C S P from the ALU; S<sub>FL</sub> picks one</td></tr>
+        <tr><td class="m">MS</td><td>microprogram sequencer: the μPC</td></tr>
+        <tr><td class="m">μROM</td><td>one control word per clock of every instruction</td></tr>
+      </table>
+      <p class="mut" style="margin-top:10px">The box around the edge is the control word: every E, L, I, D, RD, WR, select line, all driven by the ROM.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">6.1.1</div><div class="h s">Jumps</div></div>
+  <div class="row">
+    <div style="flex:0 0 140px"><img class="fig" src="assets/figw/fig6.2.png" alt="Figure 6.2" style="height:330px"><div class="figcap">Fig 6.2</div></div>
+    <div class="col">
+      <p>A jump changes PC, so execution continues somewhere else, with <b>no memory</b> of where it came from. It may be <b>conditional</b> on one flag: if false, it behaves as a nop.</p>
+      <table class="tb" style="font-size:16px;margin-top:6px">
+        <tr><th>Assembly</th><th>Code</th><th>Action</th></tr>
+        <tr><td class="m">jmpd⟨FL⟩ xx</td><td class="m">E0–E7</td><td class="m">[PC] ← xx if ⟨FL⟩</td></tr>
+        <tr><td class="m">jmpr⟨FL⟩</td><td class="m">E8–EF</td><td class="m">[PC] ← [AR] if ⟨FL⟩</td></tr>
+      </table>
+      <p class="mut" style="margin-top:8px">d = direct (address in the next word), r = register (address in AR, e.g. a computed jump table).</p>
+    </div>
+    <div style="flex:0 0 330px">
+      <table class="tb" style="font-size:16px">
+        <tr><th>⟨FL⟩</th><th>low bits</th><th>true when</th></tr>
+        <tr><td class="m">u</td><td class="m">0</td><td>always</td></tr>
+        <tr><td class="m">z</td><td class="m">1</td><td>Z = 1</td></tr>
+        <tr><td class="m">nz</td><td class="m">2</td><td>Z = 0</td></tr>
+        <tr><td class="m">c</td><td class="m">3</td><td>C = 1</td></tr>
+        <tr><td class="m">nc</td><td class="m">4</td><td>C = 0</td></tr>
+        <tr><td class="m">p</td><td class="m">5</td><td>S = 0 (plus)</td></tr>
+        <tr><td class="m">m</td><td class="m">6</td><td>S = 1 (minus)</td></tr>
+        <tr><td class="m">op</td><td class="m">7</td><td>P = 1 (odd parity)</td></tr>
+      </table>
+      <p class="mut" style="margin-top:8px">So <code>jmpdnz</code> = E2, <code>cdu</code> = F0, <code>retu</code> = 08, <code>cdm</code> = F6.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">6.2</div><div class="h s">Implementing jumps</div></div>
+  <div class="row">
+    <div style="flex:0 0 560px"><div data-w="mctable" data-ins="jmpd<FL> xx|jmpr<FL>"></div>
+      <div class="card lt" style="margin-top:20px;font-size:16px"><h4>End if ⟨FL⟩′</h4>End fires only when the selected flag is <b>0</b>, i.e. the condition fails. The instruction stops right there. In <code>jmpd</code> that same clock already moved PC past the address word, so the program falls through correctly.</div>
+    </div>
+    <div class="col">
+      <div class="qa"><h5>jmpdc SMALL at address 05, SMALL = 08</h5></div>
+      <div class="row" style="gap:12px">
+        <div class="box col"><div class="pill">C = 1 · taken</div><p style="font-size:15px;margin:8px 0 0">Ck 3: MAR ← 06, PC ← 07<br>Ck 4: PC ← M[06] = 08<br><b>4 clocks</b>, next fetch from 08</p></div>
+        <div class="box col g"><div class="pill">C = 0 · not taken</div><p style="font-size:15px;margin:8px 0 0">Ck 3: MAR ← 06, PC ← 07, End<br><br><b>3 clocks</b>, next fetch from 07</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation · jmpd</div><div class="h xs">Skip over a line</div></div>
+  <div class="simbox" data-watch="00-06"><script type="text/x-asm">
+      movi r1, 5
+      jmpdu SKIP        ; always jump to SKIP
+      movi r1, 9        ; never runs
+SKIP: stop              ; R1 is still 5
+</script></div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">6.1.4</div><div class="h s">Flags &amp; program status word</div></div>
+  <div class="row">
+    <div style="flex:0 0 430px">
+      <table class="tb" style="font-size:16px">
+        <tr><th>Flag</th><th>Set when</th><th>Updated by</th></tr>
+        <tr><td class="m">Z</td><td>result is exactly 0</td><td>all ALU ops</td></tr>
+        <tr><td class="m">P</td><td>odd number of 1s</td><td>all ALU ops</td></tr>
+        <tr><td class="m">C</td><td>carry out of / borrow into bit 7</td><td>add, sub, cmp only</td></tr>
+        <tr><td class="m">S</td><td>bit 7 of the result</td><td>add, sub, cmp only</td></tr>
+      </table>
+      <p style="font-size:17px;margin-top:12px">Data movement, jumps, calls, push and pop <b>never</b> change flags. So a <code>movs</code> or <code>movd</code> between a compare and its jump does not disturb the flag the jump tests.</p>
+      <p class="mut">Grouped together the flags form the PSW; some processors can move the PSW like data.</p>
+    </div>
+    <div class="col">
+      <div class="qa"><h5>Flag calculator</h5></div>
+      <div data-w="flags" data-a="5" data-b="9"></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation · compare + jump</div><div class="h xs">Jump only if the flag says so</div></div>
+  <div class="simbox" data-watch="00-09"><script type="text/x-asm">
+      movi r1, 9
+      movs r1           ; AR = 9
+      cmi  14           ; 9 - 14 borrows, so C = 1
+      jmpdc SMALL       ; C = 1: jump taken
+      stop
+SMALL: movi r0, 1       ; R0 = 1 means 9 < 14
+      stop
+</script></div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">6.1.2</div><div class="h s">Call &amp; return</div></div>
+  <div class="row">
+    <div style="flex:0 0 210px"><img class="fig" src="assets/figw/fig6.3.png" alt="Figure 6.3" style="height:330px"><div class="figcap">Fig 6.3 · nested calls come back</div></div>
+    <div class="col">
+      <p>A call is a jump that <b>remembers where to come back</b>. Calls nest, and returns happen in reverse order: last saved, first used. That is a <b>stack</b>, like a pile of books.</p>
+      <table class="tb" style="font-size:15.5px">
+        <tr><th>Assembly</th><th>Code</th><th>Action (only if ⟨FL⟩)</th></tr>
+        <tr><td class="m">cd⟨FL⟩ xx</td><td class="m">F0–F7</td><td class="m">SP ← SP−1, [[SP]] ← PC, PC ← xx</td></tr>
+        <tr><td class="m">cr⟨FL⟩</td><td class="m">F8–FF</td><td class="m">SP ← SP−1, [[SP]] ← PC, PC ← AR</td></tr>
+        <tr><td class="m">ret⟨FL⟩</td><td class="m">08–0F</td><td class="m">PC ← [[SP]], SP ← SP+1</td></tr>
+        <tr><td class="m">push ⟨R⟩</td><td class="m">C0–CF</td><td class="m">SP ← SP−1, [[SP]] ← ⟨R⟩</td></tr>
+        <tr><td class="m">pop ⟨R⟩</td><td class="m">D0–DF</td><td class="m">⟨R⟩ ← [[SP]], SP ← SP+1</td></tr>
+      </table>
+    </div>
+    <div style="flex:0 0 230px">
+      <div class="card lt" style="font-size:15px"><h4>Stack rules</h4>Lives in memory, grows <b>downward</b>. SP points at the top element: decrement then write on push, read then increment on pop. The value saved by a call is PC, which already points at the next instruction.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">6.2</div><div class="h s">Implementing call &amp; return</div></div>
+  <div class="row">
+    <div style="flex:0 0 600px"><div data-w="mctable" data-ins="cd<FL> xx|cr<FL>|ret<FL>"></div></div>
+    <div class="col" style="font-size:16px">
+      <ul class="t sq">
+        <li><code>cd</code> Ck 3: PC → MAR and PC++. PC now holds the return address.</li>
+        <li>Ck 4: target xx → OR, SP−1 (park the target, make room).</li>
+        <li>Ck 5–6: SP → MAR, PC written to M[SP].</li>
+        <li>Ck 7: OR → bus → PC. This is why the complete processor lets OR drive the bus.</li>
+        <li>Not taken: ends at Ck 3. SP untouched; MAR and OR may hold junk, harmless because the programmer cannot see them.</li>
+        <li><code>cd</code>/<code>cr</code>: 7 clocks, the longest. Clocks 3 and 4 of <code>cr</code> do not use the bus, yet cannot be merged: SP must finish decrementing before it is used.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation · cd / ret</div><div class="h xs">One call, one return</div></div>
+  <div class="simbox" data-stack="EC-EF" data-watch="00-05"><script type="text/x-asm">
+.set sp=0xF0
+      cdu  SUB          ; push 02, jump to SUB
+      stop              ; ret lands here
+SUB:  adi  7            ; AR = 7
+      retu              ; PC = 02 again
+</script></div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">6.1.3</div><div class="h s">Push &amp; pop</div></div>
+  <div class="row">
+    <div style="flex:0 0 520px"><div data-w="mctable" data-ins="push <R>|pop <R>"></div></div>
+    <div class="col">
+      <div class="card lt" style="font-size:16px"><h4>Why push needs a whole clock just for DSP</h4>SP must be decremented <b>before</b> it is used as an address, but a decrement only lands at the falling edge. So Ck 3 does nothing else. Pop reads at the current SP and increments in the same clock, so it saves one clock.</div>
+      <p class="mut" style="margin-top:14px">PJN’s remark: a special SP that decrements at the rising edge and increments at the falling edge would remove that clock.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation · push / pop</div><div class="h xs">In and out of the stack</div></div>
+  <div class="simbox" data-stack="EC-EF"><script type="text/x-asm">
+.set sp=0xF0
+      movi r1, 0x11
+      push r1           ; SP = EF, M[EF] = 11
+      pop  r2           ; R2 = 11, SP = F0
+      stop
+</script></div>
+</section>
+
+<!-- ================= CH 7 ================= -->
+<section class="slide" data-sec="07 · Microprogram">
+  <div style="position:absolute;left:70px;top:150px">
+    <div class="kick" style="font-size:30px">Chapter 07</div>
+    <div class="big" style="font-size:116px">Micro&shy;program</div>
+    <p class="lead" style="max-width:660px;margin-top:26px">Who turns all those signals on at the right clock? A ROM and a counter.</p>
+  </div>
+  <i data-d="ring" style="right:120px;top:210px;width:200px;height:200px"></i>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">7</div><div class="h s">The control word</div></div>
+  <div class="row">
+    <div class="col">
+      <img class="fig" src="assets/figw/fig7.1.png" alt="Figure 7.1" style="width:560px">
+      <div class="figcap">Fig 7.1 · each ROM output bit drives one control line</div>
+      <ul class="t" style="font-size:18px;margin-top:16px">
+        <li>Control signals = f(opcode, clock step): a combinational function, so a <b>ROM</b> implements it (Ch 2.2).</li>
+        <li>Word width = number of control signals. One word per clock per instruction.</li>
+        <li>Table 7.1 <b>is</b> the ROM contents: listed signals are 1, everything else 0.</li>
+      </ul>
+    </div>
+    <div style="flex:0 0 380px">
+      <div class="card"><span class="n">64</span><h4>rows in Table 7.1</h4>Fetch 2 · nop 1 · six immediates × 3 · stop 1 · ret 3 · six reg ALU × 2 · movs 1 · movd 1 · movi 2 · stor 2 · load 2 · push 3 · pop 2 · jmpd 2 · jmpr 2 · cd 5 · cr 5</div>
+      <p style="font-size:17px;margin-top:16px">Pack them tightly and the ROM needs only 64 words: a <b>6-bit</b> microaddress. The decoder maps the 8-bit opcode to the 6-bit start row of its microprogram.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">7</div><div class="h s">The sequencer</div></div>
+  <div class="row">
+    <div class="col">
+      <p>The microprogram sequencer (MS) is just a register, the <b>μPC</b>, holding the ROM row to output this clock:</p>
+      <div class="row" style="gap:12px;margin:14px 0">
+        <div class="card col" style="font-size:16px"><span class="n">+1</span><h4>Increment</h4>default each clock: next row of the same instruction</div>
+        <div class="card col" style="font-size:16px"><span class="n">LMS</span><h4>Load</h4>in fetch Ck 2: start row of the opcode, from the decoder</div>
+        <div class="card col" style="font-size:16px"><span class="n">RMS</span><h4>Reset</h4>driven by End: back to row 0, which is fetch Ck 1</div>
+      </div>
+      <p style="font-size:18px">Fetch is rows 0–1, so “go fetch the next instruction” is simply “reset μPC to 0”.</p>
+    </div>
+    <div style="flex:0 0 360px">
+      <div class="memstrip" style="font-size:14px">
+        <div class="hl"><span>0</span><b>EPC LMR IPC</b><em>fetch</em></div>
+        <div><span>1</span><b>RD LIR LMS</b><em>fetch</em></div>
+        <div><span>…</span><b></b></div>
+        <div><span>25</span><b>ERG LOR</b><em>add Ck3</em></div>
+        <div><span>26</span><b>EAR LAR End</b><em>add Ck4</em></div>
+        <div><span>…</span><b></b></div>
+        <div><span>54</span><b>EPC LMR IPC EFL End?</b><em>cd</em></div>
+      </div>
+      <p class="mut" style="margin-top:8px">Row numbers when Table 7.1 is packed in its printed order.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="hd"><div class="kick">Simulation · sequencer</div><div class="h xs">Follow the μPC through the ROM</div></div>
+  <div class="simbox" data-rom data-watch="00-05"><script type="text/x-asm">
+; open the μROM tab, then press Clock
+      movi r2, 7
+      movs r2
+      add  r2           ; AR = 0E
+      stop
+</script></div>
+</section>
+
+<!-- ================= PYQ ================= -->
+<section class="slide" data-sec="08 · Endsem PYQs">
+  <div style="position:absolute;left:70px;top:150px">
+    <div class="kick" style="font-size:30px">Chapter 08</div>
+    <div class="big" style="font-size:140px">Past<br>Endsems</div>
+  </div>
+  <div style="position:absolute;right:70px;top:170px;width:470px">
+    <table class="tb" style="font-size:15px">
+      <tr><th>Paper</th><th>Processor questions</th></tr>
+      <tr><td>Nov 2024</td><td>Q1 a, b, c · Q2 a, b · Q3 (ROM)</td></tr>
+      <tr><td>Monsoon 2023 <span class="mut">(re-posted as M25)</span></td><td>Q6 · official key exists</td></tr>
+      <tr><td>2025 model paper <span class="mut">(unofficial)</span></td><td>Q5</td></tr>
+      <tr><td>Monsoon 2010</td><td>Q5 · Q6 (a) · Q6 trace <span class="mut">(Q6 b–d, Q7, Q8 left out: too long for this tutorial)</span></td></tr>
+      <tr><td class="mut">2013, 2019, 2022, 2022 make-up</td><td class="mut">none (logic / sequential only)</td></tr>
+    </table>
+    <p class="mut" style="margin-top:10px">All endsems on cwdb for EC2.101, deduplicated. Every program below runs in the simulator.</p>
+  </div>
+</section>
+
+<!-- 2024 -->
+<section class="slide qp" data-q="assets/pyq/2024_q1.png">
+  <div class="hd"><div class="kick">Nov 2024 · Q1 · as printed</div><div class="h xs">Microcontrollers, cd S B7, call vs jump</div></div>
+  <div class="paper wide"><img src="assets/pyq/2024_q1.png" alt="Nov 2024 · Q1"></div>
+  <div class="row qp-parts"><div class="card lt col"><div class="qp-part">(a) · 2 M</div>Why a microcontroller over a microprocessor<div class="qp-links"><a class="qp-go" data-go="1"></a></div></div><div class="card lt col"><div class="qp-part">(b) · 4 M</div>Trace cd S B7 with SP = A9, PC = 06<div class="qp-links"><a class="qp-go" data-go="2"></a> <a class="qp-go" data-go="3"></a></div></div><div class="card lt col"><div class="qp-part">(c) · 2 M</div>Call versus jump<div class="qp-links"><a class="qp-go" data-go="1"></a></div></div></div>
+  <p class="qp-note">Nov 2024 endsem, page 2 · click the paper to zoom · answers follow</p>
+</section>
+<section class="slide" data-q="assets/pyq/2024_q1.png">
+  <div class="hd"><div class="kick">Nov 2024 · Q1 (a), (c)</div><div class="h xs">Microcontroller vs processor, call vs jump</div></div>
+  <div class="row">
+    <div class="col">
+      <div class="qtext"><span class="src">Q1 (a) · 2 marks</span>What is the need of microcontrollers over a general purpose microprocessor?</div>
+      <div class="qa" style="margin-top:12px">
+        <p>A microcontroller is a whole microcomputer on one chip: CPU plus memory, I/O ports, timers and interrupts. A microprocessor is only the CPU and needs external chips for all of those.</p>
+        <ul class="t sq" style="font-size:16px"><li>Fewer parts → lower cost and smaller boards</li><li>On-chip memory → shorter access time</li><li>Built for one dedicated control task (embedded use)</li></ul>
+        <p class="mut">Key: any 2 points, 1 mark each.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="qtext"><span class="src">Q1 (c) · 2 marks</span>How is “call” different from “jump”?</div>
+      <table class="tb" style="font-size:16px;margin-top:12px">
+        <tr><th></th><th>jump (jmpd / jmpr)</th><th>call (cd / cr)</th></tr>
+        <tr><td>Return address</td><td>not saved</td><td>PC pushed on the stack</td></tr>
+        <tr><td>Comes back?</td><td>no</td><td>yes, via ret</td></tr>
+        <tr><td>Touches SP / memory</td><td>no</td><td>SP − 1, one write</td></tr>
+        <tr><td>Clocks (taken)</td><td>4</td><td>7</td></tr>
+        <tr><td>Use</td><td>loops, if/else</td><td>subroutines</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-q="assets/pyq/2024_q1.png">
+  <div class="hd"><div class="kick">Nov 2024 · Q1 (b) · 4 marks</div><div class="h xs">cd S B7 with [SP] = A9, [PC] = 06</div></div>
+  <div class="row">
+    <div style="flex:0 0 560px">
+      <p style="font-size:17px">“S” = sign flag, so the condition is <b>m</b> (minus): opcode <code>F6</code>, operand <code>B7</code>. Following the key, [PC] = 06 is the value of PC once the address word has been passed (the return address). Assume S = 1.</p>
+      <table class="tb" style="font-size:15px">
+        <tr><th>Ck</th><th>Signals</th><th>Effect</th></tr>
+        <tr><td>3</td><td class="m">EPC, LMR, IPC, EFL, End if m′</td><td>S = 1 → keep going; PC → 06</td></tr>
+        <tr><td>4</td><td class="m">RD, LOR, DSP</td><td>OR ← B7, SP ← A8</td></tr>
+        <tr><td>5</td><td class="m">ESP, LMR</td><td>MAR ← A8</td></tr>
+        <tr><td>6</td><td class="m">EPC, WR</td><td>M[A8] ← 06</td></tr>
+        <tr><td>7</td><td class="m">EOR, LPC, End</td><td>PC ← B7</td></tr>
+      </table>
+      <div class="row" style="gap:10px;margin-top:12px">
+        <div class="card col lt" style="font-size:16px;text-align:center"><b>S = 1</b><br>SP = A8, M[A8] = 06, PC = B7</div>
+        <div class="card col lt" style="font-size:16px;text-align:center"><b>S = 0</b><br>ends at Ck 3: PC = 06, SP = A9</div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="note" style="font-size:16px">If you read [PC] = 06 as the address of the <code>cd</code> opcode itself, the return address becomes 08 (opcode at 06, operand at 07). State the assumption; the key accepts the flow either way.</div>
+      <p class="mut" style="margin-top:12px">Marks: control signals / simulated values 2, sign flag discussion 1, final SP, [[SP]], PC 1.</p>
+      <p style="font-size:16px">The next slide runs it with the opcode at 04, so PC = 06 at Ck 6, matching the key.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-q="assets/pyq/2024_q1.png">
+  <div class="hd"><div class="kick">Run it · Nov 2024 Q1 (b)</div><div class="h xs">cd S B7 in the simulator</div></div>
+  <div class="simbox" data-stack="A5-A9" data-watch="04-06,B7"><script type="text/x-asm">
+.set sp=0xA9 pc=0x04
+.flag s=1
+.org 0x04
+      cdm  0xB7         ; call B7 if S = 1 (minus)
+      stop              ; return lands here, at 06
+.org 0xB7
+      retu
+</script></div>
+</section>
+
+<section class="slide qp" data-q="assets/pyq/2024_q2.png">
+  <div class="hd"><div class="kick">Nov 2024 · Q2 · as printed</div><div class="h xs">add R4 steps, the whole architecture</div></div>
+  <div class="paper wide"><img src="assets/pyq/2024_q2.png" alt="Nov 2024 · Q2"></div>
+  <div class="row qp-parts"><div class="card lt col"><div class="qp-part">(a) · 5 M</div>add R4: steps, selects, timing diagram<div class="qp-links"><a class="qp-go" data-go="1"></a></div></div><div class="card lt col"><div class="qp-part">(b) · 8 M</div>Draw and explain every block<div class="qp-links"><a class="qp-go" data-go="2"></a></div></div></div>
+  <p class="qp-note">Nov 2024 endsem, page 5 · click the paper to zoom · answers follow</p>
+</section>
+<section class="slide" data-q="assets/pyq/2024_q2.png">
+  <div class="hd"><div class="kick">Nov 2024 · Q2 (a) · 5 marks</div><div class="h xs">Steps of add R4 with timing diagram</div></div>
+  <div class="row">
+    <div style="flex:0 0 360px">
+      <table class="tb" style="font-size:16px">
+        <tr><th>Ck</th><th>Signals</th><th>Select</th></tr>
+        <tr><td>1</td><td class="m">EPC, LMR, IPC</td><td>–</td></tr>
+        <tr><td>2</td><td class="m">RD, LIR, LMS</td><td>–</td></tr>
+        <tr><td>3</td><td class="m">ERG, LOR</td><td class="m">SRG ← 4</td></tr>
+        <tr><td>4</td><td class="m">EAR, LAR, End</td><td class="m">SALU ← ADD</td></tr>
+      </table>
+      <p style="font-size:16px;margin-top:12px">Opcode <code>14</code>. Ck 3: R4 → OR. Ck 4: AR on the bus into the ALU left input, OR on the right, sum loaded back to AR at the falling edge.</p>
+      <p class="mut">Key: Ck 3 1 mark, Ck 4 2 marks, timing 2 marks. Fetch is optional but makes the answer complete. Do not forget S<sub>RG</sub>.</p>
+    </div>
+    <div class="col"><div data-w="timing" data-spec="add4"></div></div>
+  </div>
+</section>
+
+<section class="slide" data-q="assets/pyq/2024_q2.png">
+  <div class="row" style="height:100%">
+    <div style="flex:0 0 430px;margin-top:-20px"><img class="fig" src="assets/figw/fig6.1.png" alt="Figure 6.1" style="height:620px"></div>
+    <div class="col">
+      <div class="hd"><div class="kick">Nov 2024 · Q2 (b) · 8 marks</div><div class="h xs">Draw &amp; explain every block</div></div>
+      <ol class="n" style="font-size:15px;line-height:1.3">
+        <li><b>Memory</b> + address and data bus: program and data; RD/WR control.</li>
+        <li><b>MR (MAR)</b>: address of the word being read or written.</li>
+        <li><b>PC</b>: address of the next instruction; +1 on every fetch.</li>
+        <li><b>SP</b>: top of the stack in memory; ± 1 on push/pop/call/ret.</li>
+        <li><b>IR + decoder</b>: opcode → start row of its microprogram.</li>
+        <li><b>OR</b>: right ALU operand; also parks the call target.</li>
+        <li><b>ALU</b>: add, sub, xor, and, or, cmp, pass.</li>
+        <li><b>AR</b>: accumulator, source and destination of ALU ops; memory address for load/stor.</li>
+        <li><b>RG</b>: R0–R11 general registers, selected by S<sub>RG</sub>.</li>
+        <li><b>Flags</b>: Z C S P, one chosen by S<sub>FL</sub> for branches.</li>
+        <li><b>MS</b>: μPC; load (LMS), reset (End), increment.</li>
+        <li><b>μROM</b>: one control word per clock per instruction.</li>
+      </ol>
+      <p class="mut" style="margin-top:6px">Key: the complete architecture scores up to 8 (0.5 per block drawn + explanation); the enhanced single-bus figure caps at 6.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide qp" data-q="assets/pyq/2024_q3.png">
+  <div class="hd"><div class="kick">Nov 2024 · Q3 · as printed</div><div class="h xs">ROM, fuses, 512 × 8, table of 7</div></div>
+  <div class="paper wide"><img src="assets/pyq/2024_q3.png" alt="Nov 2024 · Q3"></div>
+  <div class="row qp-parts"><div class="card lt col"><div class="qp-part">(a) · 2 M</div>ROM and fusing<div class="qp-links"><a class="qp-go" data-go="1"></a></div></div><div class="card lt col"><div class="qp-part">(b) · 4 M</div>512 × 8 from eight 64 × 8 chips<div class="qp-links"><a class="qp-go" data-go="1"></a></div></div><div class="card lt col"><div class="qp-part">(c) · 4 M</div>ROM for the table of 7<div class="qp-links"><a class="qp-go" data-go="1"></a></div></div></div>
+  <p class="qp-note">Nov 2024 endsem, page 10 · click the paper to zoom · answers follow</p>
+</section>
+<section class="slide" data-q="assets/pyq/2024_q3.png">
+  <div class="hd"><div class="kick">Nov 2024 · Q3 · 10 marks</div><div class="h xs">ROM questions</div></div>
+  <div class="row">
+    <div class="col" style="font-size:16px">
+      <div class="qtext" style="font-size:15px"><span class="src">(a) 2 M</span>What is ROM? How does fusing connections help?</div>
+      <p style="margin-top:8px">Non-volatile memory with fixed contents: k address lines select one of 2<sup>k</sup> words of n bits. In a PROM every row/column crossing has a fuse; blowing a fuse stores a 0 there, leaving it stores a 1. Fusing is how the truth table is written in, once.</p>
+      <div class="qtext" style="font-size:15px;margin-top:10px"><span class="src">(c) 4 M</span>ROM giving the multiplication table of 7 for three inputs</div>
+      <p style="margin-top:8px">3 inputs → 8 words; 7 × 7 = 49 → 6 output bits. An 8 × 6 ROM whose word at address x is 7x: 00, 07, 0E, 15, 1C, 23, 2A, 31 (hex). Live version on the ROM slide.</p>
+    </div>
+    <div class="col" style="font-size:16px">
+      <div class="qtext" style="font-size:15px"><span class="src">(b) 4 M</span>Address multiplexing? Build 512 × 8 from eight 64 × 8 ROMs and a decoder.</div>
+      <p style="margin-top:8px">Address multiplexing: one set of address lines serves several chips (or several halves of an address on shared pins), with a decoder choosing which chip responds.</p>
+      <svg viewBox="0 0 470 200" style="width:100%">
+        <g fill="none" stroke="#fff" stroke-width="2">
+          <rect x="10" y="50" width="96" height="120"/>
+          <path d="M106 72 H160 M106 102 H160 M106 152 H160"/>
+          <rect x="160" y="58" width="120" height="30"/><rect x="160" y="88" width="120" height="30"/><rect x="160" y="138" width="120" height="30"/>
+          <path d="M280 73 H340 M280 103 H340 M280 153 H340 M340 60 V166 M340 112 H372"/>
+          <path d="M150 22 H300 M190 22 V58 M250 22 V58" stroke-dasharray="4 3"/>
+        </g>
+        <g font-family="JBM" font-size="12" fill="#fff">
+          <text x="20" y="72">3 : 8</text><text x="20" y="88">decoder</text><text x="20" y="160" fill="#999">A8 A7 A6</text>
+          <text x="110" y="67" font-size="10">EN0</text><text x="110" y="97" font-size="10">EN1</text><text x="110" y="147" font-size="10">EN7</text>
+          <text x="168" y="78">64×8 ROM #0</text><text x="168" y="108">64×8 ROM #1</text><text x="168" y="158">64×8 ROM #7</text><text x="214" y="132" fill="#999">⋮</text>
+          <text x="150" y="14" fill="#999">A5 … A0 shared by all 8 chips</text><text x="378" y="116">D7 … D0</text><text x="346" y="54" fill="#999" font-size="10">tristate outputs</text>
+        </g>
+      </svg>
+      <p class="mut">9 address bits for 512 words: low 6 go to all chips, top 3 pick the chip.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2023 / M25 -->
+<section class="slide qp" data-q="assets/pyq/2023_q6.jpg">
+  <div class="row" style="height:100%">
+    <div class="col">
+      <div class="hd"><div class="kick">Monsoon 2023 · Q6 · as printed</div><div class="h xs">Sum of N numbers</div></div>
+      <div class="qtext" style="font-size:16px"><span class="src">What it asks</span><ul class="t sq" style="font-size:16px;margin:4px 0 0"><li>N numbers stored from 0x200; N itself at 0x220 (N &lt; 0x20)</li><li>Write the program for our 8-bit processor, code from 0x000</li><li>Explain the reasoning; the printed table is the instruction set you may use</li></ul></div>
+      <p class="qp-note" style="position:static;margin-top:14px">Monsoon 2023 endsem, page 2 (phone photo)<br>Click the paper to zoom · answers follow</p>
+    </div>
+    <div class="paper tall"><img src="assets/pyq/2023_q6.jpg" alt="Monsoon 2023 · Q6"></div>
+  </div>
+</section>
+<section class="slide" data-q="assets/pyq/2023_q6.jpg">
+  <div class="hd"><div class="kick">Monsoon 2023 · Q6 · 12 marks</div><div class="h xs">Sum of N numbers</div></div>
+  <div class="row">
+    <div style="flex:0 0 520px">
+      <div class="qtext" style="font-size:16px"><span class="src">Question</span>Find the sum of N numbers stored from 0x200; N is at 0x220 (N &lt; 0x20). Code starts at 0x000. Use our 8-bit processor and explain your reasoning.</div>
+      <div class="note" style="margin-top:12px;font-size:16px">0x200 does not fit in an 8-bit address. The official key told students to read 0x200 as <b>0xA0</b> and 0x220 as <b>0xC0</b>; same code otherwise.</div>
+      <table class="tb" style="font-size:15px;margin-top:10px">
+        <tr><th>Register</th><th>Role</th></tr>
+        <tr><td class="m">R0</td><td>pointer into the array</td></tr><tr><td class="m">R2</td><td>count, from M[C0]</td></tr>
+        <tr><td class="m">R3</td><td>running sum (the answer)</td></tr><tr><td class="m">R4</td><td>current element</td></tr>
+      </table>
+    </div>
+    <div class="col">
+<pre class="asm">      movi r0, 0xA0   <i>; pointer = start of array</i>
+      movi r1, 0xC0
+      movs r1
+      load r2         <i>; R2 = N</i>
+      movi r3, 0      <i>; sum = 0</i>
+loop1: movs r0
+      load r4         <i>; R4 = M[pointer]</i>
+      movs r3
+      add  r4
+      movd r3         <i>; sum += element</i>
+      movs r0
+      adi  1
+      movd r0         <i>; pointer++</i>
+      movs r2
+      sbi  1
+      movd r2         <i>; N--</i>
+      jmpdnz loop1    <i>; Z comes from sbi</i>
+      stop</pre>
+      <p class="mut" style="margin-top:6px">Edge cases worth a line in the answer: N = 0 would loop 256 times; the sum wraps modulo 256.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-q="assets/pyq/2023_q6.jpg">
+  <div class="hd"><div class="kick">Run it · 2023 Q6</div><div class="h xs">N = 5: 3 + 7 + 1 + 9 + 4 = 24 (0x18)</div></div>
+  <div class="simbox" data-watch="A0-A4,C0" data-speed="260"><script type="text/x-asm">
+.data 0xC0: 5
+.data 0xA0: 3 7 1 9 4
+      movi r0, 0xA0     ; pointer
+      movi r1, 0xC0
+      movs r1
+      load r2           ; N
+      movi r3, 0        ; sum
+loop1: movs r0
+      load r4
+      movs r3
+      add  r4
+      movd r3
+      movs r0
+      adi  1
+      movd r0
+      movs r2
+      sbi  1
+      movd r2
+      jmpdnz loop1
+      stop
+</script></div>
+</section>
+
+<!-- Model 2025 -->
+<section class="slide qp" data-q="assets/pyq/2025_q5.png">
+  <div class="hd"><div class="kick">2025 model paper · Q5 · as printed</div><div class="h xs">Search for a value V</div></div>
+  <div class="paper wide" style="width:860px"><img src="assets/pyq/2025_q5.png" alt="2025 model paper · Q5"></div>
+  <div class="row qp-parts"><div class="card lt col"><div class="qp-part">(a) · 10 M</div>Search program, R0 = 1 if found<div class="qp-links"><a class="qp-go" data-go="1"></a> <a class="qp-go" data-go="2"></a></div></div><div class="card lt col"><div class="qp-part">(b)</div>Comment the logic<div class="qp-links"><a class="qp-go" data-go="1"></a></div></div></div>
+  <p class="qp-note">2025 model paper (unofficial), page 2 · click the paper to zoom · answers follow</p>
+</section>
+<section class="slide" data-q="assets/pyq/2025_q5.png">
+  <div class="hd"><div class="kick">2025 model paper · Q5 · 10 marks</div><div class="h xs">Search for a value</div></div>
+  <div class="row">
+    <div style="flex:0 0 500px">
+      <div class="qtext" style="font-size:16px"><span class="src">Question</span>V is at 0x200; an array of N numbers starts at 0x201; N is at 0x220. Set R0 = 1 if V is found, else 0. Comment the code.</div>
+      <p style="font-size:16px;margin-top:12px">Same 8-bit address issue, so map 0x200 → A0, 0x201 → A1, 0x220 → C0. Plan: walk the array, compare each element with V using <code>cmp</code>; Z = 1 means equal.</p>
+      <p class="mut">Rubric: initialisation 2, fetch loop with pointer increment 3, comparison 3, branch on zero / counter 2.</p>
+    </div>
+    <div class="col">
+<pre class="asm" style="font-size:12.5px;line-height:1.36">      movi r1, 0xA0
+      movs r1
+      load r2         <i>; R2 = V</i>
+      movi r1, 0xC0
+      movs r1
+      load r3         <i>; R3 = N</i>
+      movi r1, 0xA1   <i>; pointer to a[0]</i>
+      movi r0, 0      <i>; assume not found</i>
+LOOP: movs r1
+      load r4         <i>; R4 = a[i]</i>
+      movs r4
+      cmp  r2         <i>; a[i] − V, flags only</i>
+      jmpdz FOUND
+      movs r1
+      adi  1
+      movd r1         <i>; pointer++</i>
+      movs r3
+      sbi  1
+      movd r3         <i>; N--</i>
+      jmpdnz LOOP
+      stop            <i>; R0 stays 0</i>
+FOUND: movi r0, 1
+      stop</pre>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-q="assets/pyq/2025_q5.png">
+  <div class="hd"><div class="kick">Run it · 2025 model Q5</div><div class="h xs">V = 9 in [4, 2, 9, 7] → R0 = 1</div></div>
+  <div class="simbox" data-watch="A0-A4,C0" data-speed="260"><script type="text/x-asm">
+.data 0xA0: 9 4 2 9 7   ; V, then the array
+.data 0xC0: 4           ; N
+      movi r1, 0xA0
+      movs r1
+      load r2           ; V
+      movi r1, 0xC0
+      movs r1
+      load r3           ; N
+      movi r1, 0xA1     ; pointer
+      movi r0, 0
+LOOP: movs r1
+      load r4
+      movs r4
+      cmp  r2
+      jmpdz FOUND
+      movs r1
+      adi  1
+      movd r1
+      movs r3
+      sbi  1
+      movd r3
+      jmpdnz LOOP
+      stop
+FOUND: movi r0, 1
+      stop
+</script></div>
+</section>
+
+<!-- 2010 -->
+<section class="slide qp" data-q="assets/pyq/2010_q5.png">
+  <div class="row" style="height:100%">
+    <div class="col">
+      <div class="hd"><div class="kick">Monsoon 2010 · Q5 · as printed</div><div class="h xs">Four new instructions</div></div>
+      <div class="qtext" style="font-size:16px"><span class="src">What it asks</span><ul class="t sq" style="font-size:16px;margin:4px 0 0"><li>Execute-cycle microinstructions only (fetch is given)</li><li><code>addr r1, r2, r3</code>: r1 ← r2 + r3</li><li><code>loadr r1, r2</code>: M[r2] ← M[r1]</li><li><code>loadx r1, r2</code>: AR ← M[r1 + r2]</li><li><code>pushi xx</code>: SP − 1, then M[SP] ← xx</li><li>State the clock count of each</li></ul></div>
+      <p class="qp-note" style="position:static;margin-top:14px">Monsoon 2010 endsem, page 8<br>Click the paper to zoom · answers follow</p>
+    </div>
+    <div class="paper tall"><img src="assets/pyq/2010_q5.png" alt="Monsoon 2010 · Q5"></div>
+  </div>
+</section>
+<section class="slide" data-q="assets/pyq/2010_q5.png">
+  <div class="hd"><div class="kick">Monsoon 2010 · Q5 · 20 marks</div><div class="h xs">Design four new instructions</div></div>
+  <table class="tb" style="font-size:14.5px">
+    <tr><th style="width:250px">Instruction</th><th>Execute microinstructions</th><th style="width:80px">Exec ck</th></tr>
+    <tr><td><code>addr r1, r2, r3</code><br><span class="mut">r1 ← r2 + r3</span></td><td class="m">Ck 3: ERG, LOR, SRG←r3<br>Ck 4: ERG, LAR, SRG←r2, SALU←ADD<br>Ck 5: EAR, LRG, SRG←r1, End</td><td>3 (5 total)</td></tr>
+    <tr><td><code>loadr r1, r2</code><br><span class="mut">M[[r2]] ← M[[r1]]</span></td><td class="m">Ck 3: ERG, LMR, SRG←r1<br>Ck 4: RD, LOR<br>Ck 5: ERG, LMR, SRG←r2<br>Ck 6: EOR, WR, End</td><td>4 (6)</td></tr>
+    <tr><td><code>loadx r1, r2</code><br><span class="mut">AR ← M[[r1] + [r2]]</span></td><td class="m">Ck 3: ERG, LOR, SRG←r2<br>Ck 4: ERG, LAR, SRG←r1, SALU←ADD<br>Ck 5: EAR, LMR<br>Ck 6: RD, LAR, SALU←PASS0, End</td><td>4 (6)</td></tr>
+    <tr><td><code>pushi xx</code><br><span class="mut">SP ← SP − 1, M[SP] ← xx</span></td><td class="m">Ck 3: EPC, LMR, IPC<br>Ck 4: RD, LOR, DSP<br>Ck 5: ESP, LMR<br>Ck 6: EOR, WR, End</td><td>4 (6)</td></tr>
+  </table>
+  <p style="font-size:15.5px;margin-top:10px">Points to mention: the ALU only writes AR, so <code>addr</code> and <code>loadx</code> overwrite AR and set flags; three register fields do not fit one byte, so assume the decoder supplies each S<sub>RG</sub> value. <code>loadr</code> and <code>pushi</code> use OR as a buffer that can drive the bus, just like <code>cd</code> Ck 7. <code>pushi</code> folds the decrement into Ck 4, unlike <code>push</code>.</p>
+</section>
+
+<section class="slide qp" data-q="assets/pyq/2010_q6a.png">
+  <div class="row" style="height:100%">
+    <div class="col">
+      <div class="hd"><div class="kick">Monsoon 2010 · Q6 (a) · as printed</div><div class="h xs">Fetch timing diagram</div></div>
+      <div class="qtext" style="font-size:16px"><span class="src">What it asks</span><ul class="t sq" style="font-size:16px;margin:4px 0 0"><li>Write the 2-step fetch microinstructions</li><li>Fill in every row of the timing diagram</li><li>PC = 100 and M[100] = 05 (decimal)</li></ul></div>
+      <p class="qp-note" style="position:static;margin-top:14px">Monsoon 2010 endsem, page 9<br>Click the paper to zoom · answers follow</p>
+    </div>
+    <div class="paper tall"><img src="assets/pyq/2010_q6a.png" alt="Monsoon 2010 · Q6 (a)"></div>
+  </div>
+</section>
+<section class="slide" data-q="assets/pyq/2010_q6a.png">
+  <div class="hd"><div class="kick">Monsoon 2010 · Q6 (a) · 10 marks</div><div class="h xs">Fetch timing, PC = 100, M[100] = 05</div></div>
+  <div class="row">
+    <div class="col"><div data-w="timing" data-spec="fetch2010"></div></div>
+    <div style="flex:0 0 330px;font-size:16px">
+      <p><b>Ck 1</b> <code>EPC, LMR, IPC</code>: bus = 100 after the rising edge. Falling edge: MAR = 100, PC = 101.</p>
+      <p><b>Ck 2</b> <code>RD, LIR, LMS</code>: memory drives 05 onto the bus. Falling edge: IR = 05, μPC = start row of opcode 05 (<code>ori</code>).</p>
+      <p class="mut">The paper calls the read line ERD. The bus is high-impedance between drivers; draw it dashed, as here.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-q="assets/pyq/2010_q6c2.png">
+  <div class="hd"><div class="kick">Monsoon 2010 · Q6 (trace) · 10 marks</div><div class="h xs">Trace 11 steps, SP = 255, PC = 0</div></div>
+  <div class="row">
+    <div style="flex:0 0 300px">
+      <div class="memstrip" style="font-size:14px">
+        <div><span>0, 1</span><b>movi r1, 22</b><em>91 16</em></div><div><span>2</span><b>movs r1</b><em>71</em></div>
+        <div><span>3, 4</span><b>adi 42</b><em>01 2A</em></div><div><span>5</span><b>push r1</b><em>C1</em></div>
+        <div><span>6, 7</span><b>cdu 11</b><em>F0 0B</em></div><div><span>8</span><b>pop r2</b><em>D2</em></div>
+        <div><span>9</span><b>movs r2</b><em>72</em></div><div><span>10</span><b>stop</b><em>07</em></div>
+        <div class="hl"><span>11</span><b>add r1</b><em>11</em></div><div><span>12</span><b>movd r3</b><em>83</em></div><div><span>13</span><b>retu</b><em>08</em></div>
+      </div>
+      <p class="mut" style="margin-top:6px">Numbers are decimal: <code>cdu 11</code> lands exactly on <code>add r1</code>.</p>
+    </div>
+    <div class="col">
+      <table class="tb" style="font-size:14.5px">
+        <tr><th>#</th><th>Instruction</th><th>Changed values</th></tr>
+        <tr><td>1</td><td class="m">movi r1, 22</td><td>R1 = 22, PC = 2</td></tr>
+        <tr><td>2</td><td class="m">movs r1</td><td>AR = 22, PC = 3</td></tr>
+        <tr><td>3</td><td class="m">adi 42</td><td>AR = 64, P = 1 (one 1-bit), PC = 5</td></tr>
+        <tr><td>4</td><td class="m">push r1</td><td>SP = 254, M[254] = 22, PC = 6</td></tr>
+        <tr><td>5</td><td class="m">cdu 11</td><td>SP = 253, M[253] = 8, PC = 11</td></tr>
+        <tr><td>6</td><td class="m">add r1</td><td>AR = 86, P = 0, PC = 12</td></tr>
+        <tr><td>7</td><td class="m">movd r3</td><td>R3 = 86, PC = 13</td></tr>
+        <tr><td>8</td><td class="m">retu</td><td>PC = M[253] = 8, SP = 254</td></tr>
+        <tr><td>9</td><td class="m">pop r2</td><td>R2 = M[254] = 22, SP = 255, PC = 9</td></tr>
+        <tr><td>10</td><td class="m">movs r2</td><td>AR = 22, PC = 10</td></tr>
+        <tr><td>11</td><td class="m">stop</td><td>processor halts (PC = 11)</td></tr>
+      </table>
+      <p class="mut" style="margin-top:6px">Internal MAR/OR/IR also change every step; the simulator shows them. M[253], M[254] keep their old contents after ret and pop: popping does not erase.</p>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-q="assets/pyq/2010_q6c2.png">
+  <div class="hd"><div class="kick">Run it · 2010 Q6 trace</div><div class="h xs">Open the Trace tab and compare</div></div>
+  <div class="simbox" data-base="dec" data-stack="FB-FF"><script type="text/x-asm">
+.set sp=255
+      movi r1, 22
+      movs r1
+      adi  42
+      push r1
+      cdu  11
+      pop  r2
+      movs r2
+      stop
+      add  r1
+      movd r3
+      retu
+</script></div>
+</section>
+
+<!-- ================= END ================= -->
+<section class="slide" data-sec="Wrap-up">
+  <div class="hd"><div class="kick">Before the exam</div><div class="h">The result</div></div>
+  <div class="row" style="gap:18px;margin-top:26px">
+    <div class="card col"><span class="n">01</span><h4>Edges</h4>Enable at the rise, load at the fall. Explains every one-clock trick.</div>
+    <div class="card col"><span class="n">02</span><h4>Fetch</h4><code>EPC, LMR, IPC</code><br><code>RD, LIR, LMS</code><br>2 clocks, always.</div>
+    <div class="card col"><span class="n">03</span><h4>Flags</h4>Only ALU ops write them. C, S: arithmetic only.</div>
+    <div class="card col"><span class="n">04</span><h4>Stack</h4>Push: dec, then write. Pop: read, then inc. Call saves PC after the operand.</div>
+  </div>
+  <p style="margin-top:34px;font-size:19px">Exam habits: write S<sub>RG</sub>/S<sub>ALU</sub>/S<sub>FL</sub> next to the signals, label clocks from Ck 3, count clocks of <b>executed</b> instructions, and state any assumption (8-bit addresses, decimal vs hex) in one line.</p>
+  <i data-d="halftone" class="gr" style="right:60px;bottom:40px;width:260px;height:70px"></i>
+  <i data-d="dots3" style="left:70px;bottom:60px;width:70px;height:18px"></i>
+</section>
+
+</div></div>
+<div id="prog"></div>
+<script src="js/sim.js"></script>
+<script src="js/simui.js"></script>
+<script src="js/widgets.js"></script>
+<script src="js/deck.js"></script>
+</body>
+</html>
